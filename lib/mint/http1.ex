@@ -432,7 +432,21 @@ defmodule Mint.HTTP1 do
   end
 
   defp handle_data(%__MODULE__{request: request} = conn, data) do
+    Logger.info("In handle_data/2 data (before concat) head: #{inspect(data, print_limit: 50)}")
+
+    Logger.info(
+      "In handle_data/2 data (before concat) tail: #{inspect(String.slice(data, -50, 50))}"
+    )
+
+    Logger.info("In handle_data/2 conn.buffer: #{inspect(conn.buffer)}")
     data = maybe_concat(conn.buffer, data)
+    Logger.info("In handle_data/2 data (after concat): #{inspect(data, print_limit: 50)}")
+
+    Logger.info(
+      "In handle_data/2 data (before concat) tail: #{inspect(String.slice(data, -50, 50))}"
+    )
+
+    Logger.info("Initial request.state: #{inspect(request.state)}")
 
     case decode(request.state, conn, data, []) do
       {:ok, conn, responses} ->
@@ -610,6 +624,9 @@ defmodule Mint.HTTP1 do
   end
 
   defp decode_headers(conn, request, data, responses, headers) do
+    Logger.info("In decode_headers/3 data head: #{inspect(data, print_limit: 50)}")
+    Logger.info("In decode_headers/3 data tail: #{inspect(String.slice(data, -50, 50))}")
+
     case Response.decode_header(data) do
       {:ok, {name, value}, rest} ->
         headers = [{name, value} | headers]
@@ -636,6 +653,9 @@ defmodule Mint.HTTP1 do
   end
 
   defp decode_body(:none, conn, data, request_ref, responses) do
+    Logger.info("In decode_body/3 :none data head: #{inspect(data, print_limit: 50)}")
+    Logger.info("In decode_body/3 :none data tail: #{inspect(String.slice(data, -50, 50))}")
+
     conn = put_in(conn.buffer, data)
     conn = request_done(conn)
     responses = [{:done, request_ref} | responses]
@@ -643,6 +663,9 @@ defmodule Mint.HTTP1 do
   end
 
   defp decode_body(:single, conn, data, request_ref, responses) do
+    Logger.info("In decode_body/3 :single data head: #{inspect(data, print_limit: 50)}")
+    Logger.info("In decode_body/3 :single data tail: #{inspect(String.slice(data, -50, 50))}")
+
     {conn, responses} = add_body(conn, data, responses)
     conn = request_done(conn)
     responses = [{:done, request_ref} | responses]
@@ -650,11 +673,25 @@ defmodule Mint.HTTP1 do
   end
 
   defp decode_body(:until_closed, conn, data, _request_ref, responses) do
+    Logger.info("In decode_body/3 :until_closed data head: #{inspect(data, print_limit: 50)}")
+
+    Logger.info(
+      "In decode_body/3 :until_closed data tail: #{inspect(String.slice(data, -50, 50))}"
+    )
+
     {conn, responses} = add_body(conn, data, responses)
     {:ok, conn, responses}
   end
 
   defp decode_body({:content_length, length}, conn, data, request_ref, responses) do
+    Logger.info("In decode_body/3 :content_length data head: #{inspect(data, print_limit: 50)}")
+
+    Logger.info(
+      "In decode_body/3 :content_length data tail: #{inspect(String.slice(data, -50, 50))}"
+    )
+
+    Logger.info("content_length: #{inspect(length)}")
+
     cond do
       length > byte_size(data) ->
         conn = put_in(conn.request.body, {:content_length, length - byte_size(data)})
@@ -666,20 +703,25 @@ defmodule Mint.HTTP1 do
         {conn, responses} = add_body(conn, body, responses)
         conn = request_done(conn)
         responses = [{:done, request_ref} | responses]
-        Logger.info("content_length: #{length}")
-        {head, _tail} = String.split_at(rest, 50)
-        Logger.info("binary response in decode_body(:content_length, ...): #{head}")
         next_request(conn, rest, responses)
     end
   end
 
   defp decode_body({:chunked, nil}, conn, "", _request_ref, responses) do
+    Logger.info("In decode_body/3 {:chunked, nil} data : \"\"")
+
     conn = put_in(conn.buffer, "")
     conn = put_in(conn.request.body, {:chunked, nil})
     {:ok, conn, responses}
   end
 
   defp decode_body({:chunked, nil}, conn, data, request_ref, responses) do
+    Logger.info("In decode_body/3 {:chunked, nil} data head: #{inspect(data, print_limit: 50)}")
+
+    Logger.info(
+      "In decode_body/3 {:chunked, nil} data tail: #{inspect(String.slice(data, -50, 50))}"
+    )
+
     case Integer.parse(data, 16) do
       {_size, ""} ->
         conn = put_in(conn.buffer, data)
@@ -700,6 +742,18 @@ defmodule Mint.HTTP1 do
   end
 
   defp decode_body({:chunked, :metadata, size}, conn, data, request_ref, responses) do
+    Logger.info(
+      "In decode_body/3 {:chunked, :metadata, #{inspect(size)}} data head: #{
+        inspect(data, print_limit: 50)
+      }"
+    )
+
+    Logger.info(
+      "In decode_body/3 {:chunked, :metadata, #{inspect(size)}} data tail: #{
+        inspect(String.slice(data, -50, 50))
+      }"
+    )
+
     case Parse.ignore_until_crlf(data) do
       {:ok, rest} ->
         decode_body({:chunked, size}, conn, rest, request_ref, responses)
@@ -712,10 +766,24 @@ defmodule Mint.HTTP1 do
   end
 
   defp decode_body({:chunked, :trailer}, conn, data, _request_ref, responses) do
+    Logger.info(
+      "In decode_body/3 {:chunked, :trailer} data head: #{inspect(data, print_limit: 50)}"
+    )
+
+    Logger.info(
+      "In decode_body/3 {:chunked, :trailer} data tail: #{inspect(String.slice(data, -50, 50))}"
+    )
+
     decode_trailer_headers(conn, data, responses, conn.request.headers_buffer)
   end
 
   defp decode_body({:chunked, :crlf}, conn, data, request_ref, responses) do
+    Logger.info("In decode_body/3 {:chunked, :crlf} data head: #{inspect(data, print_limit: 50)}")
+
+    Logger.info(
+      "In decode_body/3 {:chunked, :crlf} data tail: #{inspect(String.slice(data, -50, 50))}"
+    )
+
     case data do
       <<"\r\n", rest::binary>> ->
         conn = put_in(conn.request.body, {:chunked, nil})
@@ -731,6 +799,18 @@ defmodule Mint.HTTP1 do
   end
 
   defp decode_body({:chunked, length}, conn, data, request_ref, responses) do
+    Logger.info(
+      "In decode_body/3 {:chunked, #{inspect(length)}} data head: #{
+        inspect(data, print_limit: 50)
+      }"
+    )
+
+    Logger.info(
+      "In decode_body/3 {:chunked, #{inspect(length)}} data tail: #{
+        inspect(String.slice(data, -50, 50))
+      }"
+    )
+
     cond do
       length > byte_size(data) ->
         conn = put_in(conn.buffer, "")
@@ -747,6 +827,10 @@ defmodule Mint.HTTP1 do
   end
 
   defp decode_trailer_headers(conn, data, responses, headers) do
+    Logger.info("In decode_trailer_headers/4 data head: #{inspect(data, print_limit: 50)}")
+
+    Logger.info("In decode_trailer_headers/4 data tail: #{inspect(String.slice(data, -50, 50))}")
+
     case Response.decode_header(data) do
       {:ok, {name, value}, rest} ->
         headers = [{name, value} | headers]
@@ -776,11 +860,22 @@ defmodule Mint.HTTP1 do
   defp next_request(%{request: nil} = conn, data, responses) do
     # TODO: Figure out if we should keep buffering even though there are no
     # requests in flight
+
+    Logger.info("In next_request/3 request = nil data head: #{inspect(data, print_limit: 50)}")
+
+    Logger.info(
+      "In next_request/3 request = nil data tail: #{inspect(String.slice(data, -50, 50))}"
+    )
+
     {:ok, %{conn | buffer: data}, responses}
   end
 
   defp next_request(conn, data, responses) do
     Logger.error("im in next_request/3 transitioning to :status state")
+    Logger.info("In next_request/3 generic data head: #{inspect(data, print_limit: 50)}")
+
+    Logger.info("In next_request/3 generic data tail: #{inspect(String.slice(data, -50, 50))}")
+
     decode(:status, %{conn | state: :status}, data, responses)
   end
 
